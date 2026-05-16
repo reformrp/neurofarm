@@ -10,12 +10,15 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-# Считываем токен скрытый в настройках Render (Environment)
-BOT_TOKEN = os.getenv("8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI")
+# ВСТАВИЛ ТОКЕН НАПРЯМУЮ, ЧТОБЫ УБРАТЬ ОШИБКУ NONETYPE
+BOT_TOKEN = "8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI"  # Твой токен от @SvyaziReformRPBot
+
+# ⚠️ ВСТАВЬ СЮДА ТОЧНЫЙ ID СВОЕЙ ГРУППЫ С МИНУСОМ (например: -1001234567890)
 GROUP_CHAT_ID = 0  
 
-RESPAC_LINK = "https://github.io" 
-RECLAMA_TEXT = f"Заходи на сайт! , И играй по настоящему ⚔️: {RESPAC_LINK}"
+# Ссылка на твой сайт загрузки на GitHub Pages
+RESPACE_LINK = "https://github.io" 
+RECLAMA_TEXT = f"🔥 Заходи играть на REFORM RP! Наш сайт загрузки: {RESPACE_LINK}"
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
@@ -83,7 +86,7 @@ def get_random_day_news():
 @dp.message(CommandStart(), F.chat.type == "private")
 async def cmd_start_private(message: types.Message):
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🌐 Перейти на сайт", url=RESPAC_LINK))
+    builder.row(types.InlineKeyboardButton(text="🌐 Перейти на сайт", url=RESPACE_LINK))
     builder.row(types.InlineKeyboardButton(text="📰 Новости дня", callback_data="get_news_today"))
     
     await message.answer(
@@ -138,10 +141,11 @@ async def promo_scheduler():
                 logging.info("Реклама сайта успешно отправлена в группу.")
             except Exception as e:
                 logging.error(f"Ошибка рассылки: {e}")
+        else:
+            logging.info("Рассылка пропущена: GROUP_CHAT_ID равен 0.")
         clear_old_posts()
         await asyncio.sleep(3600)
 
-# Простейший нативный веб-сервер для прохождения проверок Render
 class WebStubHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -149,7 +153,7 @@ class WebStubHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write("Bot is running perfectly free!".encode("utf-8"))
     def log_message(self, format, *args):
-        return # Отключаем спам логов веб-сервера в консоль
+        return
 
 def run_web_server():
     port = int(os.getenv("PORT", 10000))
@@ -162,7 +166,6 @@ async def main():
     clear_old_posts()
     asyncio.create_task(promo_scheduler())
     
-    # Запускаем нативный веб-сервер в отдельном изолированном потоке
     web_thread = threading.Thread(target=run_web_server, daemon=True)
     web_thread.start()
     
