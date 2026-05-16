@@ -3,23 +3,23 @@ import logging
 import sqlite3
 import os
 import random
-import urllib.request
-import time
 from datetime import datetime, timedelta
-from http.server import BaseHTTPRequestHandler, HTTPServer
-import threading
-
+from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.webhook.aiohttp_handler import SimpleRequestHandler, setup_application
 
 BOT_TOKEN = "8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI"
 GROUP_CHAT_ID = 0  
 
 RESPAC_LINK = "https://github.io" 
-RECLAMA_TEXT = f"🔥 Заходи играть на REFORM RP! Наш сайт загрузки: {RESPAC_LINK}"
+RECLAMA_TEXT = f"🔥 Заходи играть на REFORM RP! Наш сайт: {RESPAC_LINK}"
 
-SELF_URL = os.getenv("SELF_URL", "https://onrender.com")
+# ⚠️ ВСТАВЬ СЮДА СВОЮ ССЫЛКУ С ХОСТИНГА RENDER ДЛЯ ВЭБХУКА
+RENDER_URL = "https://onrender.com"
+WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
+WEBHOOK_URL = f"{RENDER_URL}{WEBHOOK_PATH}"
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
@@ -30,14 +30,8 @@ def init_db():
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS hashtag_posts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id TEXT,
-            topic_id TEXT,
-            user_id TEXT,
-            username TEXT,
-            text TEXT,
-            hashtags TEXT,
-            date_saved TEXT
+            id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id TEXT, topic_id TEXT, 
+            user_id TEXT, username TEXT, text TEXT, hashtags TEXT, date_saved TEXT
         )
     """)
     conn.commit()
@@ -62,20 +56,14 @@ def get_random_day_news():
         cursor.execute("SELECT username, text, hashtags FROM hashtag_posts WHERE date_saved >= ?", (one_day_ago,))
         posts = cursor.fetchall()
         conn.close()
-
-        if not posts:
-            return "📌 Новостей за последние 24 часа пока нет."
-
+        if not posts: return "📌 Новостей за последние 24 часа пока нет."
         random.shuffle(posts)
         selected_posts = posts[:3]
-
         response = "📰 *3 СЛУЧАЙНЫЕ НОВОСТИ ДНЯ REFORM RP:*\n\n"
         for i, post in enumerate(selected_posts, 1):
             username, text, hashtags = post
             short_text = text if len(text) < 150 else text[:147] + "..."
-            response += f"{i}. 👤 *Автор:* @{username}\n💬 {short_text}\n🏷️ *Теги:* {hashtags}\n\n"
-            response += "───────────────────\n\n"
-        
+            response += f"{i}. 👤 *Автор:* @{username}\n💬 {short_text}\n🏷️ *Теги:* {hashtags}\n\n───────────────────\n\n"
         return response
     except Exception:
         return "❌ Произошла ошибка при загрузке новостей."
@@ -106,7 +94,6 @@ async def handle_group_messages(message: types.Message):
             if entity.type == "hashtag":
                 hashtag_text = message.text[entity.offset:entity.offset + entity.length]
                 found_hashtags.append(hashtag_text)
-        
         if found_hashtags:
             conn = sqlite3.connect("database.db")
             cursor = conn.cursor()
@@ -117,7 +104,6 @@ async def handle_group_messages(message: types.Message):
             text_content = message.text
             hashtags_str = ", ".join(found_hashtags)
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
             cursor.execute("""
                 INSERT INTO hashtag_posts (chat_id, topic_id, user_id, username, text, hashtags, date_saved)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -125,7 +111,7 @@ async def handle_group_messages(message: types.Message):
             conn.commit()
             conn.close()
 
-async def promo_scheduler():
+async def promo_scheduler(bot: Bot):
     while True:
         if GROUP_CHAT_ID != 0:
             try:
@@ -135,45 +121,33 @@ async def promo_scheduler():
         clear_old_posts()
         await asyncio.sleep(3600)
 
-# 🟢 ОБНОВЛЕННЫЙ ВНУТРЕННИЙ ПИНГЕР: интервал изменен на 5 секунд
-def run_internal_pinger():
-    # Небольшая задержка на старте (10 секунд), чтобы веб-сервер успел открыться
-    time.sleep(10)
-    while True:
-        try:
-            urllib.request.urlopen(SELF_URL, timeout=3)
-            print("ping", flush=True)
-        except Exception:
-            pass
-        # Засыпаем строго на 5 секунд
-        time.sleep(5)
-
-class WebStubHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write("Bot is running!".encode("utf-8"))
-    def log_message(self, format, *args):
-        return
-
-def run_web_server():
-    port = int(os.getenv("PORT", 10000))
-    server = HTTPServer(('0.0.0.0', port), WebStubHandler)
-    server.serve_forever()
-
-async def main():
+async def on_startup(bot: Bot):
     init_db()
     clear_old_posts()
-    asyncio.create_task(promo_scheduler())
+    # Регистрируем вебхук на серверах Telegram
+    await bot.set_webhook(WEBHOOK_URL)
+    logging.info(f"Вэбхук успешно установлен на URL: {WEBHOOK_URL}")
+    asyncio.create_task(promo_scheduler(bot))
+
+def main():
+    app = web.Application()
     
-    web_thread = threading.Thread(target=run_web_server, daemon=True)
-    web_thread.start()
+    # Главная страница для вывода слова ping в логи Render
+    async def handle_root(request):
+        print("ping", flush=True)
+        return web.Response(text="Bot is Live via Webhook!")
+        
+    app.router.add_get('/', handle_root)
+
+    # Привязываем обработчик aiogram к веб-серверу aiohttp
+    webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
     
-    pinger_thread = threading.Thread(target=run_internal_pinger, daemon=True)
-    pinger_thread.start()
-    
-    await dp.start_polling(bot)
+    setup_application(app, dp, bot=bot)
+    app.on_startup.append(lambda _: on_startup(bot))
+
+    port = int(os.getenv("PORT", 10000))
+    web.run_app(app, host="0.0.0.0", port=port)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
