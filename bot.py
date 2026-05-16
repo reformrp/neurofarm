@@ -10,7 +10,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.webhook.aiohttp_server import TokenBasedRequestHandler, setup_application
 
-BOT_TOKEN = "8815834719:AAEE6D_m4F8k7mG90zM"
+BOT_TOKEN = "8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI"
 GROUP_CHAT_ID = 0  
 
 RESPAC_LINK = "https://github.io" 
