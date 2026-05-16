@@ -13,10 +13,10 @@ BOT_TOKEN = os.getenv("8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI")
 GROUP_CHAT_ID = 0  
 
 RESPAC_LINK = "https://github.io" 
-RECLAMA_TEXT = f"Заходи на сайт! , И играй по настоящему ⚔️: {RESPAC_LINK}"
+RECLAMA_TEXT = f" Заходи на сайт! , И играй по настоящему ⚔️: {RESPAC_LINK}"
 
 logging.basicConfig(level=logging.INFO)
-bot = Bot(token="BOT_TOKEN")
+bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 def init_db():
@@ -51,29 +51,24 @@ def clear_old_posts():
     except Exception as e:
         logging.error(f"Ошибка при очистке базы данных: {e}")
 
-# 🟢 НОВАЯ ФУНКЦИЯ: Выборка 3 случайных новостей дня из БД
 def get_random_day_news():
     try:
         conn = sqlite3.connect("database.db")
         cursor = conn.cursor()
-        
-        # Берем только посты за последние 24 часа
         one_day_ago = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("SELECT username, text, hashtags FROM hashtag_posts WHERE date_saved >= ?", (one_day_ago,))
         posts = cursor.fetchall()
         conn.close()
 
         if not posts:
-            return "❌ Новостей за последние 24 часа пока нет."
+            return "📌 Новостей за последние 24 часа пока нет."
 
-        # Перемешиваем посты и берем максимум 3 штуки
         random.shuffle(posts)
         selected_posts = posts[:3]
 
         response = "📰 *3 СЛУЧАЙНЫЕ НОВОСТИ ДНЯ REFORM RP:*\n\n"
         for i, post in enumerate(selected_posts, 1):
             username, text, hashtags = post
-            # Форматируем текст, урезая слишком длинные сообщения для красоты
             short_text = text if len(text) < 150 else text[:147] + "..."
             response += f"{i}. 👤 *Автор:* @{username}\n💬 {short_text}\n🏷️ *Теги:* {hashtags}\n\n"
             response += "───────────────────\n\n"
@@ -83,13 +78,10 @@ def get_random_day_news():
         logging.error(f"Ошибка при выборке новостей: {e}")
         return "❌ Произошла ошибка при загрузке новостей."
 
-# КОМАНДА /START РАБОТАЕТ СТРОГО В ЛС
 @dp.message(CommandStart(), F.chat.type == "private")
 async def cmd_start_private(message: types.Message):
     builder = InlineKeyboardBuilder()
     builder.row(types.InlineKeyboardButton(text="🌐 Перейти на сайт", url=RESPAC_LINK))
-    
-    # Добавляем инлайн-кнопку для быстрого вызова новостей дня
     builder.row(types.InlineKeyboardButton(text="📰 Новости дня", callback_data="get_news_today"))
     
     await message.answer(
@@ -97,23 +89,18 @@ async def cmd_start_private(message: types.Message):
         reply_markup=builder.as_markup()
     )
 
-# 🟢 НОВЫЙ ХЕНДЛЕР: Команда /news в личных сообщениях
 @dp.message(Command("news"), F.chat.type == "private")
 async def cmd_news_private(message: types.Message):
     news_text = get_random_day_news()
     await message.answer(text=news_text, parse_mode="Markdown")
 
-# 🟢 НОВЫЙ ХЕНДЛЕР: Обработка нажатия на кнопку "Новости дня" под командой /start
-@types.CallbackQuery.register(dp)
+# ИСПРАВЛЕНО: Чистый рабочий декоратор кликов по кнопкам для aiogram 3
 @dp.callback_query(F.data == "get_news_today")
 async def cb_news_today(callback: types.CallbackQuery):
     news_text = get_random_day_news()
-    # Отправляем новости новым сообщением
     await callback.message.answer(text=news_text, parse_mode="Markdown")
-    # Сбрасываем анимацию часиков на кнопке
     await callback.answer()
 
-# ЧТЕНИЕ ХЕШТЕГОВ В ГРУППАХ
 @dp.message(F.chat.type.in_({"group", "supergroup"}))
 async def handle_group_messages(message: types.Message):
     if message.entities:
