@@ -4,16 +4,18 @@ import sqlite3
 import os
 import random
 from datetime import datetime, timedelta
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiohttp import web
 
+# Считываем токен скрытый в настройках Render (Environment)
 BOT_TOKEN = os.getenv("8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI")
 GROUP_CHAT_ID = 0  
 
 RESPAC_LINK = "https://github.io" 
-RECLAMA_TEXT = f" Заходи на сайт! , И играй по настоящему ⚔️: {RESPAC_LINK}"
+RECLAMA_TEXT = f"Заходи на сайт! , И играй по настоящему ⚔️: {RESPAC_LINK}"
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
@@ -94,7 +96,6 @@ async def cmd_news_private(message: types.Message):
     news_text = get_random_day_news()
     await message.answer(text=news_text, parse_mode="Markdown")
 
-# ИСПРАВЛЕНО: Чистый рабочий декоратор кликов по кнопкам для aiogram 3
 @dp.callback_query(F.data == "get_news_today")
 async def cb_news_today(callback: types.CallbackQuery):
     news_text = get_random_day_news()
@@ -140,23 +141,31 @@ async def promo_scheduler():
         clear_old_posts()
         await asyncio.sleep(3600)
 
-async def handle_web(request):
-    return web.Response(text="Bot is running!")
+# Простейший нативный веб-сервер для прохождения проверок Render
+class WebStubHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write("Bot is running perfectly free!".encode("utf-8"))
+    def log_message(self, format, *args):
+        return # Отключаем спам логов веб-сервера в консоль
 
-async def start_web_server():
-    app = web.Application()
-    app.router.add_get('/', handle_web)
-    runner = web.AppRunner(app)
-    await runner.setup()
+def run_web_server():
     port = int(os.getenv("PORT", 10000))
-    site = web.TCPSite(runner, '0.0.0.0', port)
-    await site.start()
+    server = HTTPServer(('0.0.0.0', port), WebStubHandler)
+    logging.info(f"Нативный веб-сервер запущен на порту {port}")
+    server.serve_forever()
 
 async def main():
     init_db()
     clear_old_posts()
     asyncio.create_task(promo_scheduler())
-    await start_web_server()
+    
+    # Запускаем нативный веб-сервер в отдельном изолированном потоке
+    web_thread = threading.Thread(target=run_web_server, daemon=True)
+    web_thread.start()
+    
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
