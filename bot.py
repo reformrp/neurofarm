@@ -4,6 +4,7 @@ import sqlite3
 import os
 import random
 import urllib.request
+import time
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
@@ -18,7 +19,7 @@ GROUP_CHAT_ID = 0
 RESPAC_LINK = "https://github.io" 
 RECLAMA_TEXT = f"🔥 Заходи играть на REFORM RP! Наш сайт загрузки: {RESPAC_LINK}"
 
-SELF_URL = "https://onrender.com"
+SELF_URL = os.getenv("SELF_URL", "https://onrender.com")
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
@@ -134,18 +135,18 @@ async def promo_scheduler():
         clear_old_posts()
         await asyncio.sleep(3600)
 
-# 🟢 ТВОЙ ОБНОВЛЕННЫЙ ПИНГЕР ДЛЯ КОНСОЛИ
-async def self_pinger():
-    await asyncio.sleep(30)
+# 🟢 ОБНОВЛЕННЫЙ ВНУТРЕННИЙ ПИНГЕР: интервал изменен на 5 секунд
+def run_internal_pinger():
+    # Небольшая задержка на старте (10 секунд), чтобы веб-сервер успел открыться
+    time.sleep(10)
     while True:
-        if "onrender.com" in SELF_URL:
-            try:
-                urllib.request.urlopen(SELF_URL, timeout=10)
-                # Выводим в логи только чистое слово ping
-                print("ping", flush=True)
-            except Exception:
-                pass
-        await asyncio.sleep(300)
+        try:
+            urllib.request.urlopen(SELF_URL, timeout=3)
+            print("ping", flush=True)
+        except Exception:
+            pass
+        # Засыпаем строго на 5 секунд
+        time.sleep(5)
 
 class WebStubHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -165,10 +166,12 @@ async def main():
     init_db()
     clear_old_posts()
     asyncio.create_task(promo_scheduler())
-    asyncio.create_task(self_pinger())
     
     web_thread = threading.Thread(target=run_web_server, daemon=True)
     web_thread.start()
+    
+    pinger_thread = threading.Thread(target=run_internal_pinger, daemon=True)
+    pinger_thread.start()
     
     await dp.start_polling(bot)
 
