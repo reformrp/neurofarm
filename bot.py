@@ -9,14 +9,14 @@ from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiohttp import web
 
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI")
 GROUP_CHAT_ID = 0  
 
 RESPAC_LINK = "https://github.io" 
 RECLAMA_TEXT = f"Заходи на сайт! , И играй по настоящему ⚔️: {RESPAC_LINK}"
 
 logging.basicConfig(level=logging.INFO)
-bot = Bot(token=8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI)
+bot = Bot(token="BOT_TOKEN")
 dp = Dispatcher()
 
 def init_db():
