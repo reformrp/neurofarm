@@ -3,22 +3,22 @@ import logging
 import sqlite3
 import os
 import random
+import urllib.request
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
+
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-# ВСТАВИЛ ТОКЕН НАПРЯМУЮ, ЧТОБЫ УБРАТЬ ОШИБКУ NONETYPE
-BOT_TOKEN = "8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI"  # Твой токен от @SvyaziReformRPBot
-
-# ⚠️ ВСТАВЬ СЮДА ТОЧНЫЙ ID СВОЕЙ ГРУППЫ С МИНУСОМ (например: -1001234567890)
+BOT_TOKEN = "8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI"
 GROUP_CHAT_ID = 0  
 
-# Ссылка на твой сайт загрузки на GitHub Pages
-RESPACE_LINK = "https://github.io" 
-RECLAMA_TEXT = f"🔥 Заходи играть на REFORM RP! Наш сайт загрузки: {RESPACE_LINK}"
+RESPAC_LINK = "https://github.io" 
+RECLAMA_TEXT = f"🔥 Заходи играть на REFORM RP! Наш сайт загрузки: {RESPAC_LINK}"
+
+SELF_URL = "https://onrender.com"
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
@@ -48,13 +48,10 @@ def clear_old_posts():
         cursor = conn.cursor()
         one_day_ago = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
         cursor.execute("DELETE FROM hashtag_posts WHERE date_saved < ?", (one_day_ago,))
-        deleted_rows = cursor.rowcount
         conn.commit()
         conn.close()
-        if deleted_rows > 0:
-            logging.info(f"Очистка БД: успешно удалено {deleted_rows} устаревших постов.")
-    except Exception as e:
-        logging.error(f"Ошибка при очистке базы данных: {e}")
+    except Exception:
+        pass
 
 def get_random_day_news():
     try:
@@ -79,20 +76,15 @@ def get_random_day_news():
             response += "───────────────────\n\n"
         
         return response
-    except Exception as e:
-        logging.error(f"Ошибка при выборке новостей: {e}")
+    except Exception:
         return "❌ Произошла ошибка при загрузке новостей."
 
 @dp.message(CommandStart(), F.chat.type == "private")
 async def cmd_start_private(message: types.Message):
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(text="🌐 Перейти на сайт", url=RESPACE_LINK))
+    builder.row(types.InlineKeyboardButton(text="🌐 Перейти на сайт", url=RESPAC_LINK))
     builder.row(types.InlineKeyboardButton(text="📰 Новости дня", callback_data="get_news_today"))
-    
-    await message.answer(
-        text="Вы хотите войти через телеграмм на сайт.",
-        reply_markup=builder.as_markup()
-    )
+    await message.answer(text="Вы хотите войти через телеграмм на сайт.", reply_markup=builder.as_markup())
 
 @dp.message(Command("news"), F.chat.type == "private")
 async def cmd_news_private(message: types.Message):
@@ -131,40 +123,49 @@ async def handle_group_messages(message: types.Message):
             """, (chat_id, topic_id, user_id, username, text_content, hashtags_str, now_str))
             conn.commit()
             conn.close()
-            logging.info(f"Сохранен пост с хештегами {hashtags_str} от @{username}")
 
 async def promo_scheduler():
     while True:
         if GROUP_CHAT_ID != 0:
             try:
                 await bot.send_message(chat_id=GROUP_CHAT_ID, text=RECLAMA_TEXT, message_thread_id=None)
-                logging.info("Реклама сайта успешно отправлена в группу.")
-            except Exception as e:
-                logging.error(f"Ошибка рассылки: {e}")
-        else:
-            logging.info("Рассылка пропущена: GROUP_CHAT_ID равен 0.")
+            except Exception:
+                pass
         clear_old_posts()
         await asyncio.sleep(3600)
+
+# 🟢 ТВОЙ ОБНОВЛЕННЫЙ ПИНГЕР ДЛЯ КОНСОЛИ
+async def self_pinger():
+    await asyncio.sleep(30)
+    while True:
+        if "onrender.com" in SELF_URL:
+            try:
+                urllib.request.urlopen(SELF_URL, timeout=10)
+                # Выводим в логи только чистое слово ping
+                print("ping", flush=True)
+            except Exception:
+                pass
+        await asyncio.sleep(300)
 
 class WebStubHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain; charset=utf-8")
         self.end_headers()
-        self.wfile.write("Bot is running perfectly free!".encode("utf-8"))
+        self.wfile.write("Bot is running!".encode("utf-8"))
     def log_message(self, format, *args):
         return
 
 def run_web_server():
     port = int(os.getenv("PORT", 10000))
     server = HTTPServer(('0.0.0.0', port), WebStubHandler)
-    logging.info(f"Нативный веб-сервер запущен на порту {port}")
     server.serve_forever()
 
 async def main():
     init_db()
     clear_old_posts()
     asyncio.create_task(promo_scheduler())
+    asyncio.create_task(self_pinger())
     
     web_thread = threading.Thread(target=run_web_server, daemon=True)
     web_thread.start()
