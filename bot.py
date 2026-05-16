@@ -2,29 +2,25 @@ import asyncio
 import logging
 import sqlite3
 import os
-from datetime import datetime
+import random
+from datetime import datetime, timedelta
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiohttp import web
 
-# Токен из настроек Render (Environment Variables)
-BOT_TOKEN = os.getenv("8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+GROUP_CHAT_ID = 0  
 
-# ⚠️ ВСТАВЬ СЮДА ТОЧНЫЙ ID СВОЕЙ ГРУППЫ С МИНУСОМ (например: -1001234567890)
-GROUP_CHAT_ID = -1001234567890 
-
-# Ссылка на твой сайт загрузки на GitHub Pages
-RESPACE_LINK = "https://github.io" 
-RECLAMA_TEXT = f"Заходи на сайт! , И играй по настоящему ⚔️: {RESPACE_LINK}"
+RESPAC_LINK = "https://github.io" 
+RECLAMA_TEXT = f"Заходи на сайт! , И играй по настоящему ⚔️: {RESPAC_LINK}"
 
 logging.basicConfig(level=logging.INFO)
-bot = Bot(token=BOT_TOKEN)
+bot = Bot(token=8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI)
 dp = Dispatcher()
 
-# Инициализация базы данных на постоянном диске /data
 def init_db():
-    conn = sqlite3.connect("/data/database.db")
+    conn = sqlite3.connect("database.db")
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS hashtag_posts (
@@ -41,21 +37,83 @@ def init_db():
     conn.commit()
     conn.close()
 
-# 1. КОМАНДА /START РАБОТАЕТ СТРОГО В ЛС
+def clear_old_posts():
+    try:
+        conn = sqlite3.connect("database.db")
+        cursor = conn.cursor()
+        one_day_ago = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("DELETE FROM hashtag_posts WHERE date_saved < ?", (one_day_ago,))
+        deleted_rows = cursor.rowcount
+        conn.commit()
+        conn.close()
+        if deleted_rows > 0:
+            logging.info(f"Очистка БД: успешно удалено {deleted_rows} устаревших постов.")
+    except Exception as e:
+        logging.error(f"Ошибка при очистке базы данных: {e}")
+
+# 🟢 НОВАЯ ФУНКЦИЯ: Выборка 3 случайных новостей дня из БД
+def get_random_day_news():
+    try:
+        conn = sqlite3.connect("database.db")
+        cursor = conn.cursor()
+        
+        # Берем только посты за последние 24 часа
+        one_day_ago = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S")
+        cursor.execute("SELECT username, text, hashtags FROM hashtag_posts WHERE date_saved >= ?", (one_day_ago,))
+        posts = cursor.fetchall()
+        conn.close()
+
+        if not posts:
+            return "❌ Новостей за последние 24 часа пока нет."
+
+        # Перемешиваем посты и берем максимум 3 штуки
+        random.shuffle(posts)
+        selected_posts = posts[:3]
+
+        response = "📰 *3 СЛУЧАЙНЫЕ НОВОСТИ ДНЯ REFORM RP:*\n\n"
+        for i, post in enumerate(selected_posts, 1):
+            username, text, hashtags = post
+            # Форматируем текст, урезая слишком длинные сообщения для красоты
+            short_text = text if len(text) < 150 else text[:147] + "..."
+            response += f"{i}. 👤 *Автор:* @{username}\n💬 {short_text}\n🏷️ *Теги:* {hashtags}\n\n"
+            response += "───────────────────\n\n"
+        
+        return response
+    except Exception as e:
+        logging.error(f"Ошибка при выборке новостей: {e}")
+        return "❌ Произошла ошибка при загрузке новостей."
+
+# КОМАНДА /START РАБОТАЕТ СТРОГО В ЛС
 @dp.message(CommandStart(), F.chat.type == "private")
 async def cmd_start_private(message: types.Message):
     builder = InlineKeyboardBuilder()
-    builder.row(types.InlineKeyboardButton(
-        text="🌐 Перейти на сайт", 
-        url=RESPACE_LINK
-    ))
+    builder.row(types.InlineKeyboardButton(text="🌐 Перейти на сайт", url=RESPAC_LINK))
+    
+    # Добавляем инлайн-кнопку для быстрого вызова новостей дня
+    builder.row(types.InlineKeyboardButton(text="📰 Новости дня", callback_data="get_news_today"))
+    
     await message.answer(
         text="Вы хотите войти через телеграмм на сайт.",
         reply_markup=builder.as_markup()
     )
-    logging.info(f"Пользователь @{message.from_user.username} запустил бота в ЛС.")
 
-# 2. ЧТЕНИЕ ХЕШТЕГОВ — РАБОТАЕТ СТРОГО В ГРУППАХ
+# 🟢 НОВЫЙ ХЕНДЛЕР: Команда /news в личных сообщениях
+@dp.message(Command("news"), F.chat.type == "private")
+async def cmd_news_private(message: types.Message):
+    news_text = get_random_day_news()
+    await message.answer(text=news_text, parse_mode="Markdown")
+
+# 🟢 НОВЫЙ ХЕНДЛЕР: Обработка нажатия на кнопку "Новости дня" под командой /start
+@types.CallbackQuery.register(dp)
+@dp.callback_query(F.data == "get_news_today")
+async def cb_news_today(callback: types.CallbackQuery):
+    news_text = get_random_day_news()
+    # Отправляем новости новым сообщением
+    await callback.message.answer(text=news_text, parse_mode="Markdown")
+    # Сбрасываем анимацию часиков на кнопке
+    await callback.answer()
+
+# ЧТЕНИЕ ХЕШТЕГОВ В ГРУППАХ
 @dp.message(F.chat.type.in_({"group", "supergroup"}))
 async def handle_group_messages(message: types.Message):
     if message.entities:
@@ -65,11 +123,9 @@ async def handle_group_messages(message: types.Message):
                 hashtag_text = message.text[entity.offset:entity.offset + entity.length]
                 found_hashtags.append(hashtag_text)
         
-        # Если нашли хештеги — пишем в базу данных
         if found_hashtags:
-            conn = sqlite3.connect("/data/database.db")
+            conn = sqlite3.connect("database.db")
             cursor = conn.cursor()
-            
             chat_id = str(message.chat.id)
             topic_id = str(message.message_thread_id) if message.message_thread_id else "General"
             user_id = str(message.from_user.id)
@@ -82,29 +138,23 @@ async def handle_group_messages(message: types.Message):
                 INSERT INTO hashtag_posts (chat_id, topic_id, user_id, username, text, hashtags, date_saved)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (chat_id, topic_id, user_id, username, text_content, hashtags_str, now_str))
-            
             conn.commit()
             conn.close()
             logging.info(f"Сохранен пост с хештегами {hashtags_str} от @{username}")
 
-# 3. БЕСКОНЕЧНЫЙ ТАЙМЕР РЕКЛАМЫ В ГРУППУ (КАЖДЫЙ ЧАС)
 async def promo_scheduler():
     while True:
-        try:
-            await bot.send_message(
-                chat_id=GROUP_CHAT_ID, 
-                text=RECLAMA_TEXT,
-                message_thread_id=None # Строго в тему General
-            )
-            logging.info("Реклама сайта успешно отправлена в группу.")
-        except Exception as e:
-            logging.error(f"Ошибка при отправке рекламы: {e}")
-        
+        if GROUP_CHAT_ID != 0:
+            try:
+                await bot.send_message(chat_id=GROUP_CHAT_ID, text=RECLAMA_TEXT, message_thread_id=None)
+                logging.info("Реклама сайта успешно отправлена в группу.")
+            except Exception as e:
+                logging.error(f"Ошибка рассылки: {e}")
+        clear_old_posts()
         await asyncio.sleep(3600)
 
-# Веб-сервер заглушки для Render
 async def handle_web(request):
-    return web.Response(text="Bot is running completely free!")
+    return web.Response(text="Bot is running!")
 
 async def start_web_server():
     app = web.Application()
@@ -117,10 +167,10 @@ async def start_web_server():
 
 async def main():
     init_db()
+    clear_old_posts()
     asyncio.create_task(promo_scheduler())
     await start_web_server()
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
-    
