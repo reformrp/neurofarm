@@ -8,15 +8,16 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.webhook.aiohttp_handler import SimpleRequestHandler, setup_application
+# ИСПРАВЛЕНО: Правильный импорт для вебхуков в aiogram 3
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
-BOT_TOKEN = "8815834719:AAFIU8hOYNWXF35I1xGL1A4E_4Vro1Jp9UI"
+BOT_TOKEN = "8815834719:AAEE6D_m4F8k7mG90zM"
 GROUP_CHAT_ID = 0  
 
 RESPAC_LINK = "https://github.io" 
-RECLAMA_TEXT = f"🔥 Заходи играть на REFORM RP! Наш сайт: {RESPAC_LINK}"
+RECLAMA_TEXT = f"🔥 Заходи играть на REFORM RP! Наш сайт загрузки: {RESPAC_LINK}"
 
-# ⚠️ ВСТАВЬ СЮДА СВОЮ ССЫЛКУ С ХОСТИНГА RENDER ДЛЯ ВЭБХУКА
+# Ссылка на твой хостинг Render для вебхука
 RENDER_URL = "https://onrender.com"
 WEBHOOK_PATH = f"/webhook/{BOT_TOKEN}"
 WEBHOOK_URL = f"{RENDER_URL}{WEBHOOK_PATH}"
@@ -63,7 +64,8 @@ def get_random_day_news():
         for i, post in enumerate(selected_posts, 1):
             username, text, hashtags = post
             short_text = text if len(text) < 150 else text[:147] + "..."
-            response += f"{i}. 👤 *Автор:* @{username}\n💬 {short_text}\n🏷️ *Теги:* {hashtags}\n\n───────────────────\n\n"
+            response += f"{i}. 👤 *Автор:* @{username}\n💬 {short_text}\n🏷️ *Теги:* {hashtags}\n\n"
+            response += "───────────────────\n\n"
         return response
     except Exception:
         return "❌ Произошла ошибка при загрузке новостей."
@@ -139,7 +141,7 @@ def main():
         
     app.router.add_get('/', handle_root)
 
-    # Привязываем обработчик aiogram к веб-серверу aiohttp
+    # Привязываем обработчик aiogram к веб-серверу aiohttp по новому пути
     webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
     webhook_requests_handler.register(app, path=WEBHOOK_PATH)
     
